@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chrome 공룡 게임</title>
+  <style>
+    body { background: #eee; display: flex; flex-direction: column; align-items: center; margin: 0; }
+    h1 { margin-top: 30px; }
+    canvas { background: #fff; border: 2px solid #888; margin-top: 20px; }
+    #score { font-size: 22px; margin-top: 12px; }
+    #gameOver {
+      position: absolute; left: 0; right: 0; top: 150px; text-align: center;
+      color: #d33; font-size: 48px; font-weight: bold; display: none; pointer-events: none;
+      text-shadow: 1px 1px 8px #fff;
+    }
+  </style>
+</head>
+<body>
+  <h1>Chrome 공룡 게임</h1>
+  <div style="position:relative;">
+    <canvas id="game" width="800" height="200"></canvas>
+    <div id="gameOver">GAME OVER</div>
+  </div>
+  <div id="score">점수: 0</div>
+<script>
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const groundY = 170;
+
+  // 공룡 초기 상태
+  const dino = { x: 40, y: groundY, w: 44, h: 44, vy: 0, jumping: false };
+  // 선인장 초기 상태
+  let cactus = { x: 800, y: groundY + 4, w: 24, h: 44, type: 1 };
+  let speed = 6;
+  let gravity = 0.8;
+  let isGameOver = false;
+  let score = 0;
+
+  // 공룡 그리기 (픽셀아트 스타일)
+  function drawDino(x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    // 몸통
+    ctx.fillStyle = "#444";
+    ctx.fillRect(0, 12, 28, 24);
+
+    // 등
+    ctx.fillRect(6, 2, 14, 14);
+
+    // 머리
+    ctx.fillRect(22, 2, 12, 12);
+
+    // 입
+    ctx.fillStyle = "#333";
+    ctx.fillRect(33, 8, 3, 3);
+
+    // 다리
+    ctx.fillStyle = "#222";
+    ctx.fillRect(4, 35, 8, 8);  // 앞다리
+    ctx.fillRect(18, 32, 8, 12); // 뒷다리
+
+    // 꼬리
+    ctx.fillStyle = "#444";
+    ctx.beginPath();
+    ctx.moveTo(0, 29);
+    ctx.lineTo(-8, 32);
+    ctx.lineTo(0, 36);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // 선인장 그리기 (팔이 달린 만화 스타일)
+  function drawCactus(x, y, h, type) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    ctx.fillStyle = "#209620";
+
+    // 몸통
+    ctx.fillRect(6, 0, 12, h);
+
+    // 왼쪽 팔
+    ctx.beginPath();
+    ctx.moveTo(6, 20);
+    ctx.lineTo(0, 22);
+    ctx.lineTo(0, 34);
+    ctx.lineTo(6, 32);
+    ctx.closePath();
+    ctx.fill();
+
+    // 오른쪽 팔 (타입에 따라 다름)
+    if(type === 1) {
+      ctx.beginPath();
+      ctx.moveTo(18, 10);
+      ctx.lineTo(24, 12);
+      ctx.lineTo(24, 24);
+      ctx.lineTo(18, 22);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 땅 선 그리기
+    ctx.strokeStyle = "#888";
+    ctx.beginPath();
+    ctx.moveTo(0, groundY + dino.h);
+    ctx.lineTo(canvas.width, groundY + dino.h);
+    ctx.stroke();
+
+    // 공룡과 선인장 그리기
+    drawDino(dino.x, dino.y);
+    drawCactus(cactus.x, cactus.y, cactus.h, cactus.type);
+  }
+
+  function update() {
+    if(isGameOver) return;
+
+    // 점수 증가 및 표시
+    score++;
+    document.getElementById('score').textContent = "점수: " + score;
+
+    // 점프 중력 처리
+    if(dino.jumping) {
+      dino.y += dino.vy;
+      dino.vy += gravity;
+      if(dino.y >= groundY) {
+        dino.y = groundY;
+        dino.jumping = false;
+        dino.vy = 0;
+      }
+    }
+
+    // 선인장 좌측 이동 및 재배치
+    cactus.x -= speed;
+    if(cactus.x + cactus.w < 0) {
+      cactus.x = canvas.width + Math.random() * 150;
+      cactus.type = Math.random() > 0.5 ? 1 : 2;
+      cactus.h = 36 + Math.random() * 20;
+      speed += 0.02;
+    }
+
+    // 충돌 감지 (단순 사각형 충돌)
+    if(dino.x + 10 < cactus.x + cactus.w &&
+      dino.x + dino.w - 8 > cactus.x &&
+      dino.y + 10 < cactus.y + cactus.h &&
+      dino.y + dino.h - 8 > cactus.y) {
+      isGameOver = true;
+      document.getElementById('gameOver').style.display = 'block';
+    }
+  }
+
+  // 게임 루프
+  function gameLoop() {
+    update();
+    draw();
+    if(!isGameOver) requestAnimationFrame(gameLoop);
+  }
+
+  // 키보드 스페이스바 점프 및 게임 재시작 처리
+  document.addEventListener('keydown', e => {
+    if((e.code === 'Space' || e.key === ' ') && !dino.jumping && !isGameOver) {
+      dino.vy = -12;
+      dino.jumping = true;
+    } else if(isGameOver && (e.code === 'Space' || e.key === ' ')) {
+      restartGame();
+    }
+  });
+
+  // 모바일 터치 점프, 재시작 처리
+  window.addEventListener('touchstart', e => {
+    e.preventDefault(); // 화면 스크롤 방지
+    if(!dino.jumping && !isGameOver) {
+      dino.vy = -12;
+      dino.jumping = true;
+    } else if(isGameOver) {
+      restartGame();
+    }
+  }, { passive: false });
+
+  // 게임 재시작 함수
+  function restartGame() {
+    speed = 6;
+    cactus.x = 800;
+    score = 0;
+    dino.y = groundY;
+    dino.jumping = false;
+    dino.vy = 0;
+    isGameOver = false;
+    document.getElementById('gameOver').style.display = 'none';
+    gameLoop();
+  }
+
+  draw();
+  gameLoop();
+</script>
+</body>
+</html>
