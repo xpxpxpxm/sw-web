@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Chrome 공룡 게임 (2단 점프·랭킹)</title>
+  <style>
+    body {
+      background: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      user-select: none;
+    }
+    h1 { margin-top: 30px; }
+    canvas { background: #fff; border: 2px solid #888; margin-top: 20px; }
+    #score { font-size: 22px; margin-top: 12px; }
+    #gameOver {
+      position: absolute; left: 0; right: 0; top: 150px;
+      text-align: center; color: #d33; font-size: 48px; font-weight: bold;
+      display: none; pointer-events: none;
+      text-shadow: 1px 1px 8px #fff;
+    }
+    #ranking {
+      width: 240px; margin-top: 20px; text-align: center;
+    }
+    #ranking h2 { margin: 8px 0 4px 0; font-size: 20px; }
+    #rankList { margin: 0; padding-left: 18px; text-align: left; }
+    #rankList li { margin-bottom: 4px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Chrome 공룡 게임 (2단 점프/랭킹)</h1>
+  <div style="position:relative">
+    <canvas id="game" width="800" height="200"></canvas>
+    <div id="gameOver">GAME OVER</div>
+  </div>
+  <div id="score">점수: 0</div>
+  <div id="ranking">
+    <h2>랭킹 TOP 5</h2>
+    <ol id="rankList"></ol>
+  </div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const groundY = 170;
+const gravity = 0.8;
+
+// 장애물 그리기 함수들
+function drawCactusType1(ctx, x, y, h) {
+  ctx.fillStyle = "#209620";
+  ctx.fillRect(x + 6, y, 12, h);
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y + 20);
+  ctx.lineTo(x, y + 22);
+  ctx.lineTo(x, y + 34);
+  ctx.lineTo(x + 6, y + 32);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x + 18, y + 10);
+  ctx.lineTo(x + 24, y + 12);
+  ctx.lineTo(x + 24, y + 24);
+  ctx.lineTo(x + 18, y + 22);
+  ctx.closePath();
+  ctx.fill();
+}
+function drawCactusType2(ctx, x, y, h) {
+  ctx.fillStyle = "#2ca02c";
+  ctx.fillRect(x + 8, y, 14, h);
+  ctx.beginPath();
+  ctx.moveTo(x + 8, y + 25);
+  ctx.lineTo(x + 2, y + 27);
+  ctx.lineTo(x + 2, y + 38);
+  ctx.lineTo(x + 8, y + 36);
+  ctx.closePath();
+  ctx.fill();
+}
+function drawCactusType3(ctx, x, y, h) {
+  ctx.fillStyle = "#178117";
+  ctx.fillRect(x + 5, y, 10, h);
+}
+
+// 공룡 그리기
+function drawDino(x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = "#444";
+  ctx.fillRect(0, 12, 28, 24);
+  ctx.fillRect(6, 2, 14, 14);
+  ctx.fillRect(22, 2, 12, 12);
+  ctx.fillStyle = "#333";
+  ctx.fillRect(33, 8, 3, 3);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(4, 35, 8, 8);
+  ctx.fillRect(18, 32, 8, 12);
+  ctx.fillStyle = "#444";
+  ctx.beginPath();
+  ctx.moveTo(0, 29);
+  ctx.lineTo(-8, 32);
+  ctx.lineTo(0, 36);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// 게임 상태
+const dino = { x: 40, y: groundY, w: 44, h: 44, vy: 0 };
+let jumpCount = 0;
+let speed = 6;
+let isGameOver = false;
+let score = 0;
+let cactuses = [];
+const maxCactuses = 5;
+
+// 장애물 타입 정보 배열
+const cactusTypes = [
+  { w: 24, hBase: 44, draw: drawCactusType1 },
+  { w: 30, hBase: 36, draw: drawCactusType2 },
+  { w: 20, hBase: 50, draw: drawCactusType3 },
+];
+
+function spawnCactus() {
+  if (cactuses.length < maxCactuses) {
+    let lastX = cactuses.length ? Math.max(...cactuses.map(c => c.x)) : 0;
+    if (lastX < canvas.width - 150 || !cactuses.length) {
+      let typeIndex = Math.floor(Math.random() * cactusTypes.length);
+      let base = cactusTypes[typeIndex];
+      cactuses.push({
+        x: canvas.width + Math.random() * 400,
+        y: groundY + 4 + (Math.random() * 20 - 10),
+        type: typeIndex,
+        w: base.w,
+        h: base.hBase + Math.random() * 20,
+        draw: base.draw
+      });
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "#888";
+  ctx.beginPath();
+  ctx.moveTo(0, groundY + dino.h);
+  ctx.lineTo(canvas.width, groundY + dino.h);
+  ctx.stroke();
+  drawDino(dino.x, dino.y);
+  for (const c of cactuses) {
+    c.draw(ctx, c.x, c.y, c.h);
+  }
+}
+
+function update() {
+  if (isGameOver) return;
+  score++;
+  document.getElementById('score').textContent = "점수: " + score;
+  dino.y += dino.vy;
+  dino.vy += gravity;
+  if (dino.y >= groundY) {
+    dino.y = groundY;
+    jumpCount = 0;
+    dino.vy = 0;
+  }
+  for (let i = cactuses.length - 1; i >= 0; i--) {
+    let cact = cactuses[i];
+    cact.x -= speed * (1 + i * 0.07);
+    if (cact.x + cact.w < 0) {
+      cactuses.splice(i, 1);
+    }
+  }
+  spawnCactus();
+  speed += 0.003;
+  // 충돌 판정을 완화한 부분
+  for (const cact of cactuses) {
+    if (
+      dino.x + 16 < cact.x + cact.w &&           // 기존 10 → 16
+      dino.x + dino.w - 14 > cact.x &&           // 기존 -8 → -14
+      dino.y + 16 < cact.y + cact.h &&           // 기존 10 → 16
+      dino.y + dino.h - 14 > cact.y              // 기존 -8 → -14
+    ) {
+      endGame();
+      break;
+    }
+  }
+}
+
+function gameLoop() {
+  update();
+  draw();
+  if (!isGameOver) requestAnimationFrame(gameLoop);
+}
+
+// 랭킹 저장 및 출력 (localStorage 기반)
+function saveRanking(name, score) {
+  let ranking = JSON.parse(localStorage.getItem("dinoRanking") || "[]");
+  ranking.push({name, score});
+  ranking.sort((a,b) => b.score - a.score);
+  if (ranking.length > 5) ranking = ranking.slice(0,5);
+  localStorage.setItem("dinoRanking", JSON.stringify(ranking));
+  showRanking();
+}
+function showRanking() {
+  let ranking = JSON.parse(localStorage.getItem("dinoRanking") || "[]");
+  let rankList = document.getElementById('rankList');
+  rankList.innerHTML = "";
+  ranking.forEach((r, i) => {
+    rankList.innerHTML += `<li>${escapeHtml(r.name)} - <b>${r.score}</b></li>`;
+  });
+}
+function escapeHtml(text) {
+  return text.replace(/[&<>"']/g, function(m) {
+    return ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+    })[m];
+  });
+}
+function endGame() {
+  isGameOver = true;
+  document.getElementById('gameOver').style.display = 'block';
+  setTimeout(() => {
+    let uname = prompt("이름을 입력하세요 (랭킹 등록):", "익명");
+    if (uname == null || uname.replace(/\s/g,'') === "") uname = "익명";
+    saveRanking(uname, score);
+  }, 100);
+}
+
+// 키보드, 터치 이벤트: 2단 점프와 재시작
+document.addEventListener('keydown', e => {
+  if ((e.code === 'Space' || e.key === ' ') && jumpCount < 2 && !isGameOver) {
+    dino.vy = -12;
+    jumpCount++;
+  } else if (isGameOver && (e.code === 'Space' || e.key === ' ')) {
+    restartGame();
+  }
+});
+window.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (jumpCount < 2 && !isGameOver) {
+    dino.vy = -12;
+    jumpCount++;
+  } else if (isGameOver) {
+    restartGame();
+  }
+}, { passive: false });
+
+// 게임 재시작
+function restartGame() {
+  speed = 6;
+  cactuses = [];
+  score = 0;
+  dino.y = groundY;
+  jumpCount = 0;
+  dino.vy = 0;
+  isGameOver = false;
+  document.getElementById('gameOver').style.display = 'none';
+  gameLoop();
+}
+
+// 초기화
+showRanking();
+draw();
+gameLoop();
+
+</script>
+</body>
+</html>
